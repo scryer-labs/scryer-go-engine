@@ -48,7 +48,7 @@ func native() { C.execute_v1() }
 			t.Fatal(err)
 		}
 	}
-	result, err := Scan(context.Background(), root, scanFacts)
+	result, err := Scan(context.Background(), root, scanFacts, false)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -84,5 +84,39 @@ func native() { C.execute_v1() }
 	}
 	if len(want) != 0 || !testEdge || !inactiveEdge {
 		t.Fatalf("missing call evidence: %v; test %v; inactive %v; collected %+v", want, testEdge, inactiveEdge, calls.Calls)
+	}
+}
+
+func TestResolveUsesGoWorkAndLocalModuleReplacement(t *testing.T) {
+	root := t.TempDir()
+	for file, data := range map[string]string{
+		"go.work":      "go 1.25.0\nuse .\n",
+		"go.mod":       "module example.org/main\ngo 1.25.0\nrequire example.org/lib v0.0.0\nreplace example.org/lib => ./local\n",
+		"main.go":      "package main\nimport \"example.org/lib\"\nfunc main() { lib.Run() }\n",
+		"local/go.mod": "module example.org/lib\ngo 1.25.0\n",
+		"local/lib.go": "package lib\nfunc Run() {}\n",
+	} {
+		target := filepath.Join(root, file)
+		if err := os.MkdirAll(filepath.Dir(target), 0700); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(target, []byte(data), 0600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	scan := func(resolve bool) graph {
+		t.Helper()
+		facts, err := Scan(context.Background(), root, []string{"call-graph"}, resolve)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return facts["call-graph"].(graph)
+	}
+	if g := scan(false); len(g.Calls) != 1 || g.Calls[0].Target != "" {
+		t.Fatalf("static: %+v", g)
+	}
+	if g := scan(true); g.Semantic == nil || g.Semantic.Status == "fallback" || len(g.Calls) != 1 ||
+		g.Calls[0].Target != "local/lib.go:12" {
+		t.Fatalf("resolved: %+v", g)
 	}
 }

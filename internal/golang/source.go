@@ -173,7 +173,7 @@ func (s *sources) collectImports() {
 				ref.Resolution = "cgo"
 			case len(targets) == 1 && targets[0].Kind == "package":
 				ref.Resolution, ref.TargetComponentID = "local-module-candidate", targets[0].ID
-				if owner.Manifest == targets[0].Manifest {
+				if owner.Manifest == targets[0].Manifest || s.allowLocalModuleImports && parsed.fact.InBuild {
 					ref.Resolution = "resolved"
 				}
 				s.links = append(s.links, packageReference{owner.ID, targets[0].ID, ref})

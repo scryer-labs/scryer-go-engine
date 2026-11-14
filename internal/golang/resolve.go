@@ -58,7 +58,7 @@ func loadBuildModel(ctx context.Context, root string, manifests []Manifest, work
 		command := exec.CommandContext(bounded, tool, append(args, "./...")...)
 		command.Dir = dir
 		command.WaitDelay = time.Second
-		command.Env = goListEnv()
+		command.Env = goListEnv(root, dir)
 		var stderr bytes.Buffer
 		command.Stderr = &stderr
 		output, err := command.Output()
@@ -86,7 +86,7 @@ func loadBuildModel(ctx context.Context, root string, manifests []Manifest, work
 			for _, failure := range pkg.DepsErrors {
 				messages = append(messages, failure.Err)
 			}
-			if pkg.Dir == "" {
+			if pkg.Dir == "" || pkg.Error != nil {
 				continue
 			}
 			key := pkg.Dir + "\x00" + pkg.ImportPath
@@ -110,12 +110,23 @@ func loadBuildModel(ctx context.Context, root string, manifests []Manifest, work
 	return model
 }
 
-func goListEnv() []string {
+func goListEnv(root, dir string) []string {
 	env := slices.DeleteFunc(os.Environ(), func(setting string) bool {
 		name, _, _ := strings.Cut(setting, "=")
-		return slices.Contains([]string{"GOPROXY", "GOSUMDB", "GOTOOLCHAIN", "GOFLAGS", "GOENV", "GOPACKAGESDRIVER", "GONOPROXY", "GOPRIVATE"}, name)
+		return slices.Contains([]string{"GOPROXY", "GOSUMDB", "GOTOOLCHAIN", "GOFLAGS", "GOENV", "GOPACKAGESDRIVER", "GONOPROXY", "GOPRIVATE", "GOWORK"}, name)
 	})
-	return append(env, "GOPROXY=off", "GOSUMDB=off", "GOTOOLCHAIN=local", "GOFLAGS=", "GOENV=off", "GONOPROXY=none", "GOPRIVATE=")
+	workspace := "off"
+	for current := dir; ; current = filepath.Dir(current) {
+		candidate := filepath.Join(current, "go.work")
+		if info, err := os.Stat(candidate); err == nil && info.Mode().IsRegular() {
+			workspace = candidate
+			break
+		}
+		if current == root || current == filepath.Dir(current) {
+			break
+		}
+	}
+	return append(env, "GOWORK="+workspace, "GOPROXY=off", "GOSUMDB=off", "GOTOOLCHAIN=local", "GOFLAGS=", "GOENV=off", "GONOPROXY=none", "GOPRIVATE=")
 }
 
 func (s *sources) applyBuildModel(root string, model packageModel) bool {
@@ -149,9 +160,15 @@ func (s *sources) applyBuildModel(root string, model packageModel) bool {
 		return false
 	}
 	for i := range s.files {
-		s.files[i].fact.InBuild = active[s.files[i].fact.Path]
+		file := &s.files[i].fact
+		if active[file.Path] || model.Status == "resolved" {
+			file.InBuild = active[file.Path]
+		}
 	}
 	s.byImport = byImport
 	s.allowLocalModuleImports = true
+	s.imports = s.imports[:0]
+	s.links = s.links[:0]
+	s.collectImports()
 	return true
 }
