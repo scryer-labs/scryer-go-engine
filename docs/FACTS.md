@@ -48,3 +48,14 @@ symbol name coincidences supply no evidence about dependencies in the target.
 The installed Go engine advertises `scan` for these four facts. Runtime
 coverage, impact analysis, IPC and semantic dependency resolution are
 outside its capabilities.
+
+## Toolchain-assisted resolution
+
+`--facts files,call-graph --resolve` adds a `semantic` object to the selected
+fact payloads. Its `basis` is `go-list`, and `status` is `resolved`, `partial`
+or `fallback`. `message`, when present, retains the available diagnostic.
+The engine loads the package model without downloading dependencies and uses
+it to refine build membership and checkout-local type joins, including supported
+`go.work` and local module replacements. Existing IDs still refer to the same
+source locations. Interface dispatch and declarations outside checkout source
+retain unresolved call sites. The `dependencies` fact remains declaration-based.
