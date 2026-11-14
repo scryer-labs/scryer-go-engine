@@ -55,7 +55,7 @@ java_project = members["scryer-java-engine"]["facts"]
 assert any(language["language"] == "Kotlin" for language in java_project["stack"]["languages"])
 go = next(x["data"] for x in members["scryer"]["facts"]["engineFacts"] if x.get("engine") == "go" and x["fact"] == "call-graph")
 assert any(c["resolution"] == "resolved" and c.get("targetSymbolId") for c in go["calls"])
-assert any(c["site"]["file"] == "internal/engineabi/loader_unix.go" and "dlsym" in c["callee"] and not c.get("targetSymbolId") for c in go["calls"])
+assert any(c["site"]["file"] == "internal/engineabi/loader_cgo.go" and "C.engine_symbol" == c["callee"] and not c.get("targetSymbolId") for c in go["calls"])
 if source.stat().st_size <= 20 * 1024 * 1024:
     (output / "workspace.json").write_bytes(source.read_bytes())
 report["projects"] = [{"path": item["path"], "artifact": item["artifact"]} for item in index]
