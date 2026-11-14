@@ -20,7 +20,7 @@ cat > "$package/engine.json" <<MANIFEST
   "capabilities": {
     "languages": ["Go"],
     "operations": ["scan"],
-    "scanFacts": ["dependencies"]
+    "scanFacts": ["dependencies", "architecture", "files"]
   },
   "library": "bin/libscryer-go-engine.dylib",
   "os": "darwin",
