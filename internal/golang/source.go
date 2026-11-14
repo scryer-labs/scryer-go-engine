@@ -55,14 +55,15 @@ type parsedFile struct {
 }
 
 type sources struct {
-	fset           *token.FileSet
-	files          []parsedFile
-	components     []component
-	imports        []sourceImport
-	links          []packageReference
-	byImport       map[string][]component
-	componentsByID map[string]component
-	buildContext   build.Context
+	allowLocalModuleImports bool
+	fset                    *token.FileSet
+	files                   []parsedFile
+	components              []component
+	imports                 []sourceImport
+	links                   []packageReference
+	byImport                map[string][]component
+	componentsByID          map[string]component
+	buildContext            build.Context
 }
 
 func (p *project) readSources(ctx context.Context) (*sources, error) {

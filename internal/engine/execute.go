@@ -81,7 +81,7 @@ func (r Request) scan(ctx context.Context) (*report, *protocolError) {
 	if info, err := os.Stat(root); err != nil || !info.IsDir() {
 		return nil, &protocolError{"INVALID_REQUEST", "scan repository must be an existing directory"}
 	}
-	result, err := golang.Scan(ctx, root, selected)
+	result, err := golang.Scan(ctx, root, selected, r.Scan.Static != nil && !*r.Scan.Static)
 	if err != nil {
 		return nil, &protocolError{"GO_SCAN_ERROR", err.Error()}
 	}

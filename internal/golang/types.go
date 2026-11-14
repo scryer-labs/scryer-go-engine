@@ -60,7 +60,7 @@ func (c *localChecker) info(file sourceFile) *types.Info {
 
 func (c *localChecker) Import(path string) (*types.Package, error) {
 	choices := c.sources.byImport[path]
-	if len(choices) != 1 || choices[0].Kind != "package" || c.active == nil || c.active.manifest != choices[0].Manifest {
+	if len(choices) != 1 || choices[0].Kind != "package" || c.active == nil || (!c.sources.allowLocalModuleImports && c.active.manifest != choices[0].Manifest) {
 		return nil, fmt.Errorf("no unique local package for %q", path)
 	}
 	group := c.packages[choices[0].ID]

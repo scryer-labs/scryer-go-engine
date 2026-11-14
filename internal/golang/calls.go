@@ -41,14 +41,15 @@ type call struct {
 }
 
 type graph struct {
-	ProjectID   string   `json:"projectId"`
-	Basis       string   `json:"basis"`
-	GOOS        string   `json:"goos"`
-	GOARCH      string   `json:"goarch"`
-	CgoEnabled  bool     `json:"cgoEnabled"`
-	Limitations []string `json:"limitations"`
-	Symbols     []symbol `json:"symbols"`
-	Calls       []call   `json:"calls"`
+	Semantic    *packageModel `json:"semantic,omitempty"`
+	ProjectID   string        `json:"projectId"`
+	Basis       string        `json:"basis"`
+	GOOS        string        `json:"goos"`
+	GOARCH      string        `json:"goarch"`
+	CgoEnabled  bool          `json:"cgoEnabled"`
+	Limitations []string      `json:"limitations"`
+	Symbols     []symbol      `json:"symbols"`
+	Calls       []call        `json:"calls"`
 }
 
 func (s *sources) callGraph(ctx context.Context, root string) (graph, error) {

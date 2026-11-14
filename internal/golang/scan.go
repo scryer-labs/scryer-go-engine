@@ -60,7 +60,7 @@ func Supports(fact string) bool {
 	return slices.Contains(scanFacts, fact)
 }
 
-func Scan(ctx context.Context, root string, selected []string) (map[string]any, error) {
+func Scan(ctx context.Context, root string, selected []string, resolveMode ...bool) (map[string]any, error) {
 	p := project{filesystem: os.DirFS(root), manifests: []Manifest{}, workspaces: []Workspace{}}
 	if err := p.discover(ctx); err != nil {
 		return nil, err
@@ -78,17 +78,30 @@ func Scan(ctx context.Context, root string, selected []string) (map[string]any, 
 		if err != nil {
 			return nil, err
 		}
+		var model *packageModel
+		if len(resolveMode) == 1 && resolveMode[0] && (wantCalls || slices.Contains(selected, "files")) {
+			result := loadBuildModel(ctx, root, p.manifests, p.workspaces)
+			if !sources.applyBuildModel(root, result) && result.Status != "fallback" {
+				result.Status, result.Message = "fallback", "no scanned source files in Go package model"
+			}
+			model = &result
+		}
 		if slices.Contains(selected, "architecture") {
 			facts["architecture"] = sources.architecture(root)
 		}
 		if slices.Contains(selected, "files") {
-			facts["files"] = sources.fileFacts(root)
+			data := sources.fileFacts(root)
+			if model != nil {
+				data["semantic"] = model
+			}
+			facts["files"] = data
 		}
 		if wantCalls {
 			graph, err := sources.callGraph(ctx, root)
 			if err != nil {
 				return nil, err
 			}
+			graph.Semantic = model
 			facts["call-graph"] = graph
 		}
 	}
