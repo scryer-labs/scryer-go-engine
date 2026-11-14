@@ -86,7 +86,7 @@ func (s *sources) callGraph(ctx context.Context, root string) (graph, error) {
 			continue
 		}
 		var info *types.Info
-		if source.fact.InBuild && !source.fact.SyntaxErrors && !hasCgo(source.ast) {
+		if source.fact.InBuild && !source.fact.SyntaxErrors {
 			info = checker.info(source.fact)
 		}
 		var parents []string
@@ -103,6 +103,7 @@ func (s *sources) callGraph(ctx context.Context, root string) (graph, error) {
 				caller = s.symbolID(node.Pos())
 			case *ast.CallExpr:
 				target, reason, include := callTarget(node.Fun, info, declarations)
+
 				if include {
 					g.Calls = append(g.Calls, s.callSite(source.fact, node, caller, target, reason))
 				}
@@ -181,6 +182,11 @@ binding:
 		return "", "indirect-call", true
 	}
 	if selector, ok := expr.(*ast.SelectorExpr); ok {
+		if qualifier, ok := selector.X.(*ast.Ident); ok {
+			if pkg, ok := info.Uses[qualifier].(*types.PkgName); ok && pkg.Imported().Path() == "C" {
+				return "", "native-symbol-resolution", true
+			}
+		}
 		if selection := info.Selections[selector]; selection != nil {
 			receiver := selection.Recv()
 			if ptr, ok := receiver.(*types.Pointer); ok {

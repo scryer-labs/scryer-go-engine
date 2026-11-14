@@ -21,6 +21,7 @@ type sourceFile struct {
 	SyntaxErrors bool     `json:"syntaxErrors,omitempty"`
 	TestOnly     bool     `json:"testOnly,omitempty"`
 	InBuild      bool     `json:"inBuild"`
+	BuildError   string   `json:"buildError,omitempty"`
 }
 
 type sourceImport struct {
@@ -54,13 +55,14 @@ type parsedFile struct {
 }
 
 type sources struct {
-	fset         *token.FileSet
-	files        []parsedFile
-	components   []component
-	imports      []sourceImport
-	links        []packageReference
-	byImport     map[string][]component
-	buildContext build.Context
+	fset           *token.FileSet
+	files          []parsedFile
+	components     []component
+	imports        []sourceImport
+	links          []packageReference
+	byImport       map[string][]component
+	componentsByID map[string]component
+	buildContext   build.Context
 }
 
 func (p *project) readSources(ctx context.Context) (*sources, error) {
@@ -71,7 +73,7 @@ func (p *project) readSources(ctx context.Context) (*sources, error) {
 	}
 	s := &sources{
 		fset: token.NewFileSet(), files: []parsedFile{}, components: []component{}, imports: []sourceImport{},
-		links: []packageReference{}, byImport: map[string][]component{}, buildContext: cfg,
+		links: []packageReference{}, byImport: map[string][]component{}, componentsByID: map[string]component{}, buildContext: cfg,
 	}
 	modules := map[string]Manifest{}
 	for _, manifest := range p.manifests {
@@ -88,8 +90,11 @@ func (p *project) readSources(ctx context.Context) (*sources, error) {
 		}
 		node, parseErr := parser.ParseFile(s.fset, file, data, parser.ParseComments|parser.SkipObjectResolution)
 		dir := path.Dir(file)
-		active, _ := cfg.MatchFile(dir, path.Base(file))
+		active, buildErr := cfg.MatchFile(dir, path.Base(file))
 		fact := sourceFile{Path: file, ComponentIDs: []string{}, SyntaxErrors: parseErr != nil, TestOnly: strings.HasSuffix(file, "_test.go"), InBuild: active}
+		if buildErr != nil {
+			fact.BuildError = buildErr.Error()
+		}
 		if node != nil && node.Name != nil && node.Name.Name != "_" {
 			fact.Package = node.Name.Name
 			id := dir + ":" + fact.Package
@@ -124,6 +129,7 @@ func (p *project) readSources(ctx context.Context) (*sources, error) {
 		s.files = append(s.files, parsedFile{fact, node})
 	}
 	for _, item := range s.components {
+		s.componentsByID[item.ID] = item
 		if item.ImportPath != "" {
 			s.byImport[item.ImportPath] = append(s.byImport[item.ImportPath], item)
 		}
@@ -159,12 +165,17 @@ func (s *sources) collectImports() {
 			if spec.Name != nil {
 				ref.Alias = spec.Name.Name
 			}
-			switch targets := s.byImport[value]; {
+			owner := s.componentsByID[parsed.fact.ComponentIDs[0]]
+			targets := s.byImport[value]
+			switch {
 			case value == "C":
 				ref.Resolution = "cgo"
 			case len(targets) == 1 && targets[0].Kind == "package":
-				ref.Resolution, ref.TargetComponentID = "resolved", targets[0].ID
-				s.links = append(s.links, packageReference{parsed.fact.ComponentIDs[0], targets[0].ID, ref})
+				ref.Resolution, ref.TargetComponentID = "local-module-candidate", targets[0].ID
+				if owner.Manifest == targets[0].Manifest {
+					ref.Resolution = "resolved"
+				}
+				s.links = append(s.links, packageReference{owner.ID, targets[0].ID, ref})
 			case len(targets) > 1:
 				ref.Resolution = "ambiguous"
 			}

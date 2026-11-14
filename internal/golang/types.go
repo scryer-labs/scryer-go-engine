@@ -5,15 +5,15 @@ import (
 	"fmt"
 	"go/ast"
 	"go/types"
-	"strconv"
 )
 
 type localPackage struct {
-	path  string
-	files []*ast.File
-	info  *types.Info
-	pkg   *types.Package
-	state string
+	path     string
+	manifest string
+	files    []*ast.File
+	info     *types.Info
+	pkg      *types.Package
+	state    string
 }
 
 type localChecker struct {
@@ -31,12 +31,12 @@ func newLocalChecker(ctx context.Context, sources *sources) *localChecker {
 		if path == "" {
 			path = component.ID
 		}
-		c.packages[component.ID] = &localPackage{path: path}
-		c.testGroups[component.ID] = &localPackage{path: path}
+		c.packages[component.ID] = &localPackage{path: path, manifest: component.Manifest}
+		c.testGroups[component.ID] = &localPackage{path: path, manifest: component.Manifest}
 	}
 	for _, source := range sources.files {
 		if source.ast == nil || len(source.fact.ComponentIDs) == 0 || source.fact.SyntaxErrors ||
-			!source.fact.InBuild || hasCgo(source.ast) {
+			!source.fact.InBuild {
 			continue
 		}
 		id := source.fact.ComponentIDs[0]
@@ -46,15 +46,6 @@ func newLocalChecker(ctx context.Context, sources *sources) *localChecker {
 		}
 	}
 	return c
-}
-
-func hasCgo(file *ast.File) bool {
-	for _, imp := range file.Imports {
-		if value, _ := strconv.Unquote(imp.Path.Value); value == "C" {
-			return true
-		}
-	}
-	return false
 }
 
 func (c *localChecker) info(file sourceFile) *types.Info {
@@ -69,7 +60,7 @@ func (c *localChecker) info(file sourceFile) *types.Info {
 
 func (c *localChecker) Import(path string) (*types.Package, error) {
 	choices := c.sources.byImport[path]
-	if len(choices) != 1 || choices[0].Kind != "package" {
+	if len(choices) != 1 || choices[0].Kind != "package" || c.active == nil || c.active.manifest != choices[0].Manifest {
 		return nil, fmt.Errorf("no unique local package for %q", path)
 	}
 	group := c.packages[choices[0].ID]
@@ -95,6 +86,6 @@ func (c *localChecker) check(pkg *localPackage) {
 		Uses: map[*ast.Ident]types.Object{}, Types: map[ast.Expr]types.TypeAndValue{},
 		Selections: map[*ast.SelectorExpr]*types.Selection{}, Instances: map[*ast.Ident]types.Instance{},
 	}
-	config := types.Config{Importer: c, Error: func(error) {}}
+	config := types.Config{Importer: c, FakeImportC: true, Error: func(error) {}}
 	pkg.pkg, _ = config.Check(pkg.path, c.sources.fset, pkg.files, pkg.info)
 }
