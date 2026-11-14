@@ -54,7 +54,7 @@ type project struct {
 	goFiles    []string
 }
 
-var scanFacts = []string{"dependencies", "architecture", "files"}
+var scanFacts = []string{"dependencies", "architecture", "files", "call-graph"}
 
 func Supports(fact string) bool {
 	return slices.Contains(scanFacts, fact)
@@ -72,7 +72,8 @@ func Scan(ctx context.Context, root string, selected []string) (map[string]any, 
 			"limitations": []string{"selected-module-versions", "transitive-dependencies", "remote-version-metadata"},
 		}
 	}
-	if slices.Contains(selected, "architecture") || slices.Contains(selected, "files") {
+	wantCalls := slices.Contains(selected, "call-graph")
+	if slices.Contains(selected, "architecture") || slices.Contains(selected, "files") || wantCalls {
 		sources, err := p.readSources(ctx)
 		if err != nil {
 			return nil, err
@@ -82,6 +83,13 @@ func Scan(ctx context.Context, root string, selected []string) (map[string]any, 
 		}
 		if slices.Contains(selected, "files") {
 			facts["files"] = sources.fileFacts(root)
+		}
+		if wantCalls {
+			graph, err := sources.callGraph(ctx, root)
+			if err != nil {
+				return nil, err
+			}
+			facts["call-graph"] = graph
 		}
 	}
 	return facts, nil
