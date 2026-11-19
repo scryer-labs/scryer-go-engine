@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/scryer-labs/scryer-go-engine/internal/analysis"
 	"github.com/scryer-labs/scryer-go-engine/internal/golang"
 )
 
@@ -16,11 +17,16 @@ const (
 )
 
 type Request struct {
-	ProtocolVersion int    `json:"protocolVersion"`
-	ID              string `json:"requestId"`
-	Stack           string `json:"stack"`
-	Operation       string `json:"operation"`
-	Scan            struct {
+	ProtocolVersion int                      `json:"protocolVersion"`
+	ID              string                   `json:"requestId"`
+	Stack           string                   `json:"stack"`
+	Operation       string                   `json:"operation"`
+	Coverage        analysis.CoverageRequest `json:"coverage"`
+	Impact          struct {
+		Before, After, BeforeRoot, AfterRoot string
+		Resolve                              bool
+	} `json:"impact"`
+	Scan struct {
 		Repository string   `json:"repository"`
 		Static     *bool    `json:"static"`
 		Facts      []string `json:"facts"`
@@ -47,13 +53,47 @@ type report struct {
 }
 
 func (r Request) Execute(ctx context.Context) ([]byte, error) {
-	result, failure := r.scan(ctx)
+	var result any
+	var failure *protocolError
+	if r.ProtocolVersion != 1 || r.Stack != "go" {
+		failure = &protocolError{"INVALID_REQUEST", "unsupported protocol version or stack"}
+	} else {
+		switch r.Operation {
+		case "scan":
+			result, failure = r.scan(ctx)
+		case "coverage":
+			if !filepath.IsAbs(r.Coverage.Repository) {
+				failure = &protocolError{"INVALID_REQUEST", "coverage requires an absolute repository"}
+				break
+			}
+			value, err := golang.Coverage(ctx, r.Coverage.Repository, r.Coverage)
+			if err != nil {
+				failure = &protocolError{"GO_COVERAGE_ERROR", err.Error()}
+			} else {
+				result = value
+			}
+		case "impact":
+			before, err := golang.Impact(ctx, r.Impact.BeforeRoot, r.Impact.Resolve)
+			if err != nil {
+				failure = &protocolError{"GO_IMPACT_ERROR", "before: " + err.Error()}
+				break
+			}
+			after, err := golang.Impact(ctx, r.Impact.AfterRoot, r.Impact.Resolve)
+			if err != nil {
+				failure = &protocolError{"GO_IMPACT_ERROR", "after: " + err.Error()}
+				break
+			}
+			result = analysis.ImpactFacts{SchemaVersion: 1, BeforeSHA: r.Impact.Before, AfterSHA: r.Impact.After, Before: before, After: after}
+		default:
+			failure = &protocolError{"UNSUPPORTED_OPERATION", "Go engine does not support operation " + r.Operation}
+		}
+	}
 	return json.Marshal(struct {
 		ProtocolVersion int            `json:"protocolVersion"`
 		ID              string         `json:"requestId"`
 		Stack           string         `json:"stack"`
 		Operation       string         `json:"operation"`
-		Report          *report        `json:"report"`
+		Report          any            `json:"report"`
 		Error           *protocolError `json:"error"`
 	}{1, r.ID, "go", r.Operation, result, failure})
 }

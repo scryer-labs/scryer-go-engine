@@ -20,12 +20,13 @@ type span struct {
 }
 
 type symbol struct {
-	ID          string `json:"symbolId"`
-	Name        string `json:"name,omitempty"`
-	Kind        string `json:"kind"`
-	Definition  span   `json:"definition"`
-	ComponentID string `json:"componentId"`
-	TestOnly    bool   `json:"testOnly,omitempty"`
+	impactKey, impactSignature, impactFingerprint, impactSource string
+	ID                                                          string `json:"symbolId"`
+	Name                                                        string `json:"name,omitempty"`
+	Kind                                                        string `json:"kind"`
+	Definition                                                  span   `json:"definition"`
+	ComponentID                                                 string `json:"componentId"`
+	TestOnly                                                    bool   `json:"testOnly,omitempty"`
 }
 
 type call struct {
@@ -129,7 +130,8 @@ func (s *sources) functionSymbol(node ast.Node, file sourceFile) (symbol, token.
 	default:
 		return symbol{}, token.NoPos
 	}
-	return symbol{s.symbolID(node.Pos()), name, kind, s.sourceSpan(node), file.ComponentIDs[0], file.TestOnly}, pos
+	key, signature, fingerprint, source := s.impactIdentity(node)
+	return symbol{ID: s.symbolID(node.Pos()), Name: name, Kind: kind, Definition: s.sourceSpan(node), ComponentID: file.ComponentIDs[0], TestOnly: file.TestOnly, impactKey: key, impactSignature: signature, impactFingerprint: fingerprint, impactSource: source}, pos
 }
 
 func (s *sources) symbolID(pos token.Pos) string {

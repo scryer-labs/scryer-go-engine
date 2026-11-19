@@ -30,7 +30,37 @@ source evidence and limitations. Add `--resolve` for Go-toolchain-backed
 file and call bindings. This mode requires an available Go toolchain and
 records partial or fallback evidence when the project model cannot be loaded.
 
+## Coverage and change impact
+
+With a current Core CLI and this engine:
+
+```sh
+scryer project analyze --operations coverage -o coverage.html
+scryer project analyze --resolve --operations impact,coverage -o impact.html
+scryer project analyze --json --compact
+```
+
+Impact defaults to static scan evidence; `--resolve` also runs native tests and
+collects after-snapshot coverage. Failed dynamic resolution/tests/coverage stop
+analysis without static fallback. Core owns snapshot comparison, traversal and
+report rendering; the engine supplies shared scan projections and normalized
+JSON coverage. Multi-engine projects use the same command; CMake target selectors
+belong to C++ and are not interpreted here.
+
+Requires an installed Go toolchain and offline-resolvable dependencies. Coverage
+runs `go test -mod=readonly -count=1` per discovered module, with project-module
+coverage instrumentation. Import supports Go set/count/atomic coverprofiles.
+Dynamic impact reuses scan's go-list build selection and local bindings;
+interface dispatch remains a boundary. Test files are not instrumented, and
+there is no individual-test attribution.
+
+Native runtime acceptance currently targets macOS. Windows package builds and
+ABI smoke checks do not establish equivalent runtime toolchain acceptance.
+Coverage is aggregate execution evidence, not assertion effectiveness or a
+causal test-to-caller path. The common JSON contract is maintained in Scryer
+Core's `docs/contracts/COVERAGE.md` and `docs/contracts/IMPACT.md`.
+
 ## Release verification
 
 The [GitHub workflow](.github/workflows/ci.yml) builds the platform packages
-and exercises a scan through the ABI before publishing a version tag.
+and exercises scan, static impact and coverage import through the ABI before publishing a version tag.

@@ -45,9 +45,10 @@ Native calls and lookups retain source evidence without creating concrete
 Go target IDs or workspace edges. The system's engine inventory and ABI
 symbol name coincidences supply no evidence about dependencies in the target.
 
-The installed Go engine advertises `scan` for these four facts. Runtime
-coverage, impact analysis, IPC and semantic dependency resolution are
-outside its capabilities.
+The installed Go engine advertises `scan` for these four facts, plus separate
+`coverage` and `impact` operations. Runtime profiles and impact projections use
+the shared Core analysis contract. IPC and effective dependency resolution
+remain outside its capabilities.
 
 ## Toolchain-assisted resolution
 

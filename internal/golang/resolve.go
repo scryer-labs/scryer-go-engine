@@ -130,6 +130,9 @@ func goListEnv(root, dir string) []string {
 }
 
 func (s *sources) applyBuildModel(root string, model packageModel) bool {
+	if canonical, err := filepath.EvalSymlinks(root); err == nil {
+		root = canonical
+	}
 	byImport := map[string][]component{}
 	active := map[string]bool{}
 	members := map[string]component{}
@@ -137,7 +140,11 @@ func (s *sources) applyBuildModel(root string, model packageModel) bool {
 		members[item.Directory+"\x00"+item.Name] = item
 	}
 	for _, pkg := range model.Packages {
-		dir, err := filepath.Rel(root, pkg.Dir)
+		directory := pkg.Dir
+		if canonical, err := filepath.EvalSymlinks(directory); err == nil {
+			directory = canonical
+		}
+		dir, err := filepath.Rel(root, directory)
 		if err != nil || !filepath.IsLocal(dir) {
 			continue
 		}

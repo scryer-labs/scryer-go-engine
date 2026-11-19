@@ -42,3 +42,33 @@ with tempfile.TemporaryDirectory() as directory:
         assert any(item["path"] == "main.go" for item in response["report"]["facts"]["files"]["files"])
     finally:
         library.release_buffer_v1(result.response)
+
+
+# Shared analysis operations must also survive packaging and ABI transport.
+assert {"scan", "impact", "coverage"} <= set(manifest["capabilities"]["operations"])
+def execute(request):
+    data = json.dumps({"protocolVersion": 1, "requestId": "analysis-package-"+request["operation"], "stack": 'go', **request}).encode()
+    result = library.execute_v1(View(data, len(data)))
+    try:
+        response = json.loads(ctypes.string_at(result.response.data, result.response.size))
+        assert result.status == 0 and response["error"] is None, response
+        return response["report"]
+    finally:
+        library.release_buffer_v1(result.response)
+
+with tempfile.TemporaryDirectory() as directory:
+    root = Path(directory).resolve()
+    before, after = root / "before", root / "after"
+    before.mkdir(); after.mkdir()
+    (before / "value.go").write_text('package fixture\nfunc value() int { return 1 }\n')
+    (after / "value.go").write_text('package fixture\nfunc value() int { return 2 }\n')
+    report = execute({"operation":"impact", "impact":{"before":"a"*40, "after":"b"*40, "beforeRoot":str(before), "afterRoot":str(after), "resolve":False}})
+    left, right = report["before"]["symbols"][0], report["after"]["symbols"][0]
+    assert left["key"] == right["key"] and left["fingerprint"] != right["fingerprint"], report
+    source = root / "value.go"
+    source.write_text('package fixture\nfunc value() int { return 1 }\n')
+    (root / "go.mod").write_text("module example.test/packagecheck\n\ngo 1.24\n")
+    artifact = root / "coverage.out"
+    artifact.write_text("mode: count\nexample.test/packagecheck/value.go:2.18,2.28 1 1\n")
+    coverage = execute({"operation":"coverage","coverage":{"repository":str(root),"artifact":str(artifact)}})
+    assert coverage["status"] == "collected" and coverage["coverage"]["files"], coverage
