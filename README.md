@@ -60,6 +60,19 @@ Coverage is aggregate execution evidence, not assertion effectiveness or a
 causal test-to-caller path. The common JSON contract is maintained in Scryer
 Core's `docs/contracts/COVERAGE.md` and `docs/contracts/IMPACT.md`.
 
+## Known gaps
+
+- Dependency facts describe declarations; effective selected/transitive versions
+  and remote version metadata are not collected.
+- Static imports/build replacements can remain candidates. Dynamic Go build
+  selection refines local joins, but repository-external types, interface dispatch,
+  native/cgo targets and runtime-loaded code are not fully bound.
+- IPC/REST communication facts are not implemented.
+- Coverage has no per-test attribution or branch-adequacy evidence. Test files
+  are not instrumented. Test effectiveness and code-smell rules are not implemented.
+- Native Windows runtime analysis acceptance is deferred; package/ABI checks
+  are separate from a target project's build and test success.
+
 ## Release verification
 
 The [GitHub workflow](.github/workflows/ci.yml) builds the platform packages
