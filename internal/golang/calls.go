@@ -42,6 +42,7 @@ type call struct {
 }
 
 type graph struct {
+	Binding     bindingModel  `json:"binding"`
 	Semantic    *packageModel `json:"semantic,omitempty"`
 	ProjectID   string        `json:"projectId"`
 	Basis       string        `json:"basis"`
@@ -113,6 +114,7 @@ func (s *sources) callGraph(ctx context.Context, root string) (graph, error) {
 			return true
 		})
 	}
+	g.Binding = checker.bindingModel()
 	return g, ctx.Err()
 }
 
@@ -126,7 +128,7 @@ func (s *sources) functionSymbol(node ast.Node, file sourceFile) (symbol, token.
 			kind = "method"
 		}
 	case *ast.FuncLit:
-		kind = "lambda"
+		kind, pos = "lambda", n.Pos()
 	default:
 		return symbol{}, token.NoPos
 	}
@@ -180,6 +182,11 @@ func callTarget(expr ast.Expr, info *types.Info, declarations map[token.Pos]stri
 		}
 	}
 binding:
+	if literal, ok := expr.(*ast.FuncLit); ok {
+		if target := declarations[literal.Pos()]; target != "" {
+			return target, "", true
+		}
+	}
 	id := instanceIdentifier(expr)
 	if id == nil {
 		return "", "indirect-call", true

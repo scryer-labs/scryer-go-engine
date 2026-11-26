@@ -41,8 +41,8 @@ scryer project analyze --json --compact
 ```
 
 Impact defaults to static scan evidence; `--resolve` also runs native tests and
-collects after-snapshot coverage. Failed dynamic resolution/tests/coverage stop
-analysis without static fallback. Core owns snapshot comparison, traversal and
+collects after-snapshot coverage. Failed stages remain explicit; Core retains independent usable impact facts and
+marks the report partial with nonzero exit status. There is no silent static fallback. Core owns snapshot comparison, traversal and
 report rendering; the engine supplies shared scan projections and normalized
 JSON coverage. Multi-engine projects use the same command; CMake target selectors
 belong to C++ and are not interpreted here.
@@ -51,7 +51,10 @@ Requires an installed Go toolchain and offline-resolvable dependencies. Coverage
 runs `go test -mod=readonly -count=1` per discovered module, with project-module
 coverage instrumentation. Import supports Go set/count/atomic coverprofiles.
 Dynamic impact reuses scan's go-list build selection and local bindings;
-interface dispatch remains a boundary. Test files are not instrumented, and
+interface dispatch and function-valued variables remain boundaries. Anonymous
+closures are retained using lexical correspondence anchors; repeated indistinguishable
+anchors are ambiguous rather than arbitrarily paired. Local type diagnostics are
+retained separately from go-list build selection. Test files are not instrumented, and
 there is no individual-test attribution.
 
 Native runtime acceptance currently targets macOS. Windows package builds and

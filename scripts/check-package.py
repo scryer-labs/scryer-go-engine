@@ -29,7 +29,8 @@ library.cancel_v1.restype = ctypes.c_bool
 library.release_buffer_v1.argtypes = [Buffer]
 library.release_buffer_v1.restype = None
 with tempfile.TemporaryDirectory() as directory:
-    root = Path(directory).resolve()
+    root = Path(directory).resolve() / "project space 工程"
+    root.mkdir()
     (root / "main.go").write_text("package main\nfunc main() {}\n")
     request = json.dumps({
         "protocolVersion": 1, "requestId": "package-check", "stack": "go",
@@ -57,14 +58,19 @@ def execute(request):
         library.release_buffer_v1(result.response)
 
 with tempfile.TemporaryDirectory() as directory:
-    root = Path(directory).resolve()
+    root = Path(directory).resolve() / "project space 工程"
+    root.mkdir()
     before, after = root / "before", root / "after"
     before.mkdir(); after.mkdir()
-    (before / "value.go").write_text('package fixture\nfunc value() int { return 1 }\n')
-    (after / "value.go").write_text('package fixture\nfunc value() int { return 2 }\n')
+    (before / "value.go").write_text('package fixture\nfunc value() int { return 1 }\nfunc caller(){ f := func(){value()}; f() }\n')
+    (after / "value.go").write_text('package fixture\nfunc value() int { return 2 }\nfunc caller(){ f := func(){value()}; f() }\n')
     report = execute({"operation":"impact", "impact":{"before":"a"*40, "after":"b"*40, "beforeRoot":str(before), "afterRoot":str(after), "resolve":False}})
     left, right = report["before"]["symbols"][0], report["after"]["symbols"][0]
     assert left["key"] == right["key"] and left["fingerprint"] != right["fingerprint"], report
+    closures = [item for item in report["after"]["symbols"] if item["signature"].startswith("closure ")]
+    assert len(closures) == 1, report
+    assert any(call.get("callerSymbolId") == closures[0]["id"] and call.get("candidateSymbolId") == right["id"] for call in report["after"]["calls"]), report
+    assert report["after"]["resolution"]["binding"]["basis"] == "go-types-local", report
     source = root / "value.go"
     source.write_text('package fixture\nfunc value() int { return 1 }\n')
     (root / "go.mod").write_text("module example.test/packagecheck\n\ngo 1.24\n")

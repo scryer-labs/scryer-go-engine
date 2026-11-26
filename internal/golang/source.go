@@ -15,13 +15,14 @@ import (
 )
 
 type sourceFile struct {
-	Path         string   `json:"path"`
-	ComponentIDs []string `json:"componentIds"`
-	Package      string   `json:"package,omitempty"`
-	SyntaxErrors bool     `json:"syntaxErrors,omitempty"`
-	TestOnly     bool     `json:"testOnly,omitempty"`
-	InBuild      bool     `json:"inBuild"`
-	BuildError   string   `json:"buildError,omitempty"`
+	Path             string   `json:"path"`
+	ComponentIDs     []string `json:"componentIds"`
+	Package          string   `json:"package,omitempty"`
+	SyntaxErrors     bool     `json:"syntaxErrors,omitempty"`
+	SyntaxDiagnostic string   `json:"syntaxDiagnostic,omitempty"`
+	TestOnly         bool     `json:"testOnly,omitempty"`
+	InBuild          bool     `json:"inBuild"`
+	BuildError       string   `json:"buildError,omitempty"`
 }
 
 type sourceImport struct {
@@ -55,6 +56,7 @@ type parsedFile struct {
 }
 
 type sources struct {
+	impactParents           map[ast.Node]ast.Node
 	allowLocalModuleImports bool
 	fset                    *token.FileSet
 	files                   []parsedFile
@@ -93,6 +95,9 @@ func (p *project) readSources(ctx context.Context) (*sources, error) {
 		dir := path.Dir(file)
 		active, buildErr := cfg.MatchFile(dir, path.Base(file))
 		fact := sourceFile{Path: file, ComponentIDs: []string{}, SyntaxErrors: parseErr != nil, TestOnly: strings.HasSuffix(file, "_test.go"), InBuild: active}
+		if parseErr != nil {
+			fact.SyntaxDiagnostic = parseErr.Error()
+		}
 		if buildErr != nil {
 			fact.BuildError = buildErr.Error()
 		}

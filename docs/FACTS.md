@@ -60,3 +60,38 @@ it to refine build membership and checkout-local type joins, including supported
 `go.work` and local module replacements. Existing IDs still refer to the same
 source locations. Interface dispatch and declarations outside checkout source
 retain unresolved call sites. The `dependencies` fact remains declaration-based.
+
+
+## Impact projection and binding diagnostics
+
+The call graph adds `binding` with `basis: "go-types-local"`, `status`
+(`resolved`, `partial`, or `not-collected`), checked package-group count and
+`diagnostics[]`. Diagnostics retain relative `file`, one-based `line`/byte
+`column`, `message`, and `kind` (`type-error` or `import-unavailable`). This
+local-only checker deliberately does not import external/cache types; missing
+imports make this layer partial even when go-list validates build selection.
+An error does not erase valid independent local bindings. A diagnostic-free
+local projection is not proof of complete compiler or runtime binding.
+
+Impact keeps function literals, their callers and outgoing calls from this same
+graph. Keys use the enclosing declaration, local assignment binding or call
+argument anchor and function signature; comments, line movement and CRLF do not
+change them. Repeated identical anchors share a key and remain ambiguous in Core.
+Changing a binding/signature or moving a file can appear as removal/addition.
+An immediately invoked literal can have a direct target. Passing a callback is
+not a proven invocation; calls through function-valued variables stay unresolved.
+
+`contexts[]` retain non-callable Go tokens, discovered `go.mod`/`go.work` files and
+adjacent `go.sum`/`go.work.sum`. Configuration fingerprints normalize CRLF only;
+changes remain unassessed context rather than inventing affected functions.
+Effects of environment flags, generated files, external modules and configuration
+outside the scanned root are not inferred. Static impact also retains local
+binding diagnostics under its `resolution` metadata.
+
+
+Malformed files retain `syntaxDiagnostic` in scan file facts. Static impact
+omits their parser-recovered callable identities, retains the complete file
+(normalizing CRLF only) as unassessed context, and keeps located file diagnostics
+in `resolution.syntaxDiagnostics` and notes. Independent valid files remain
+available. Dynamic impact continues to reject syntax errors in selected build
+files; parser recovery is never treated as complete callable comparison.

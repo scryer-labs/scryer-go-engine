@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"go/ast"
 	"go/types"
+	"sort"
+	"strings"
 )
 
 type localPackage struct {
@@ -17,11 +19,12 @@ type localPackage struct {
 }
 
 type localChecker struct {
-	ctx        context.Context
-	sources    *sources
-	packages   map[string]*localPackage
-	testGroups map[string]*localPackage
-	active     *localPackage
+	ctx         context.Context
+	sources     *sources
+	packages    map[string]*localPackage
+	testGroups  map[string]*localPackage
+	diagnostics []bindingDiagnostic
+	active      *localPackage
 }
 
 func newLocalChecker(ctx context.Context, sources *sources) *localChecker {
@@ -86,6 +89,73 @@ func (c *localChecker) check(pkg *localPackage) {
 		Uses: map[*ast.Ident]types.Object{}, Types: map[ast.Expr]types.TypeAndValue{},
 		Selections: map[*ast.SelectorExpr]*types.Selection{}, Instances: map[*ast.Ident]types.Instance{},
 	}
-	config := types.Config{Importer: c, FakeImportC: true, Error: func(error) {}}
+	config := types.Config{Importer: c, FakeImportC: true, Error: func(err error) {
+		diagnostic := bindingDiagnostic{Message: err.Error(), Kind: "type-error"}
+		if located, ok := err.(types.Error); ok {
+			pos := c.sources.fset.PositionFor(located.Pos, false)
+			diagnostic.File, diagnostic.Line, diagnostic.Column, diagnostic.Message = pos.Filename, pos.Line, pos.Column, located.Msg
+			if strings.Contains(located.Msg, "could not import") {
+				diagnostic.Kind = "import-unavailable"
+			}
+		}
+		c.diagnostics = append(c.diagnostics, diagnostic)
+	}}
 	pkg.pkg, _ = config.Check(pkg.path, c.sources.fset, pkg.files, pkg.info)
+}
+
+// Local type checking intentionally has no external importer. Its partial
+// diagnostics are separate from go-list build selection, not compiler success.
+type bindingDiagnostic struct {
+	File    string `json:"file,omitempty"`
+	Line    int    `json:"line,omitempty"`
+	Column  int    `json:"column,omitempty"`
+	Kind    string `json:"kind"`
+	Message string `json:"message"`
+}
+type bindingModel struct {
+	Packages    int                 `json:"packages"`
+	Basis       string              `json:"basis"`
+	Status      string              `json:"status"`
+	Diagnostics []bindingDiagnostic `json:"diagnostics"`
+}
+
+func (c *localChecker) bindingModel() bindingModel {
+	result := bindingModel{Basis: "go-types-local", Status: "resolved", Diagnostics: []bindingDiagnostic{}}
+	for _, pkg := range c.packages {
+		if pkg.state == "checked" {
+			result.Packages++
+		}
+	}
+	for _, pkg := range c.testGroups {
+		if pkg.state == "checked" {
+			result.Packages++
+		}
+	}
+	if result.Packages == 0 {
+		result.Status = "not-collected"
+	}
+	seen := map[bindingDiagnostic]bool{}
+	for _, diagnostic := range c.diagnostics {
+		if !seen[diagnostic] {
+			result.Diagnostics = append(result.Diagnostics, diagnostic)
+			seen[diagnostic] = true
+		}
+	}
+	sort.Slice(result.Diagnostics, func(i, j int) bool {
+		a, b := result.Diagnostics[i], result.Diagnostics[j]
+		if a.File != b.File {
+			return a.File < b.File
+		}
+		if a.Line != b.Line {
+			return a.Line < b.Line
+		}
+		if a.Column != b.Column {
+			return a.Column < b.Column
+		}
+		return a.Message < b.Message
+	})
+	if len(result.Diagnostics) > 0 {
+		result.Status = "partial"
+	}
+	return result
 }
